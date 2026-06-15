@@ -197,16 +197,6 @@ class MihomeController:
         except Exception:
             return False
 
-    def disconnect(self):
-        """主动断开设备连接，释放 socket"""
-        with self._lock:
-            if self.device is not None:
-                try:
-                    self.device = None
-                    logger.debug("米家连接已断开")
-                except Exception as e:
-                    logger.debug(f"断开连接时异常: {e}")
-
     def turn_on(self, force: bool = True) -> bool:
         if force:
             self.reset_cooldown()

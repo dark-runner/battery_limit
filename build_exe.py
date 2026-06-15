@@ -1,9 +1,18 @@
 """Build Battery Limit Manager EXE"""
-import os, sys, shutil, subprocess, struct
+import os, sys, struct
 from pathlib import Path
-from PIL import Image
 
 HERE = Path(__file__).parent
+
+# ── 自动检测虚拟环境 ──
+_VENV_PY = HERE / ".venv" / "Scripts" / "python.exe"
+if _VENV_PY.exists() and sys.executable.lower() != str(_VENV_PY).lower():
+    # 重启脚本使用虚拟环境的 Python
+    os.execl(str(_VENV_PY), str(_VENV_PY), *sys.argv)
+    # os.execl 成功后不会执行到这里
+
+import shutil, subprocess
+from PIL import Image
 
 
 def gen_ico():
@@ -93,6 +102,7 @@ def build():
         "--hidden-import", "src.mihome_controller",
         "--hidden-import", "src.config",
         "--hidden-import", "src.gui",
+        "--hidden-import", "PySide6",
         "--hidden-import", "src.micloud_helper",
         "--hidden-import", "Crypto",
         "--hidden-import", "Cryptodome",

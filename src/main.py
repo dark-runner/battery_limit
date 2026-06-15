@@ -105,7 +105,7 @@ def _setup_logging():
         return
     fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     root.setLevel(logging.INFO)
-    fh = RotatingFileHandler('battery_control.log', maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+    fh = RotatingFileHandler('battery_control.log', maxBytes=5*1024*1024, backupCount=3, encoding='utf-8-sig')
     fh.setFormatter(fmt)
     root.addHandler(fh)
     ch = logging.StreamHandler(sys.stdout)
