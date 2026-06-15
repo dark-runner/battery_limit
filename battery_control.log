@@ -1,0 +1,6 @@
+2026-06-10 15:55:17,738 - mihome_controller - WARNING - python-miio 未安装，请运行: pip install python-miio
+2026-06-10 16:28:39,706 - mihome_controller - INFO - 已连接到米家设备: 192.168.1.100
+2026-06-10 16:28:39,707 - battery_auto_controller - INFO - 已初始化电池自动控制器: 高阈值=80.0%, 低阈值=30.0%, 检查间隔=60秒
+2026-06-10 16:28:39,707 - __main__ - INFO - 启动电池限制管理应用
+2026-06-10 16:28:39,708 - battery_auto_controller - INFO - 电池自动控制已启动
+2026-06-11 09:49:38,977 - mihome_controller - ERROR - 无法连接到米家设备: non-hexadecimal number found in fromhex() arg at position 31

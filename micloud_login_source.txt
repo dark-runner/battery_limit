@@ -1,0 +1,284 @@
+33:     def login(self):
+34:         """Login in to Xiaomi cloud.
+35: 
+36:         :return: True if login successful, False otherwise.
+37:         """
+38:         if not self._check_credentials():
+39:             logging.error("You need to define username and password to log in")
+40:             return False
+41: 
+42:         if self.user_id and self.service_token:
+43:             return True
+44: 
+45:         logging.debug("Xiaomi logging in with userid %s", self.username)
+46:         try:
+47:             if self._login_request():
+48:                 self.failed_logins = 0
+49:             else:
+50:                 self.failed_logins += 1
+51:                 logging.debug("Xiaomi cloud login attempt %s", self.failed_logins)
+52:         except MiCloudException as e:
+53:             logging.info("Error logging on to Xiaomi cloud (%s): %s", self.failed_logins, str(e))
+54:             self.failed_logins += 1
+55:             self.service_token = None
+56:             if self.failed_logins > 10:
+57:                 logging.info("Repeated errors logging on to Xiaomi cloud. Cleaning stored cookies")
+58:                 self._init_session(reset=True)
+59:             return False
+60:         except MiCloudAccessDenied as e:
+61:             logging.info("Access denied when logging on to Xiaomi cloud (%s): %s", self.failed_logins, str(e))
+62:             self.failed_logins += 1
+63:             self.service_token = None
+64:             if self.failed_logins > 10:
+65:                 logging.info("Repeated errors logging on to Xiaomi cloud. Cleaning stored cookies")
+66:                 self._init_session(reset=True)
+67:             raise e
+68:         except:
+69:             logging.exception("Unknown exception occurred!")
+70:             return False
+71: 
+72:         return True
+73: 
+74: 
+75:     def _login_request(self):
+76:         try:
+77:             self._init_session()
+78:             sign = self._login_step1()
+79:             if not sign.startswith('http'):
+80:                 location = self._login_step2(sign)
+81:             else:
+82:                 location = sign # we already have login location
+83: 
+84:             response3 = self._login_step3(location)
+85:             if response3.status_code == 403:
+86:                 raise MiCloudAccessDenied("Access denied. Did you set the correct api key and/or username?")
+87:             elif response3.status_code == 200:
+88:                 logging.debug("Your service token: %s", self.service_token)
+89:                 return True
+90:             else:
+91:                 logging.debug("request returned status '%s', reason: %s, content: %s", response3.status_code,
+92:                     response3.reason, response3.text)
+93:                 raise MiCloudException(response3.status_code + response3.reason)
+94:         except MiCloudAccessDenied as e:
+95:             raise e
+96:         except Exception as e:
+97:             raise MiCloudException("Cannot logon to Xiaomi cloud: " + str(e))
+98: 
+99: 
+100:     def _init_session(self, reset=False):
+101:         if not self.session or reset:
+102:             if self.session is not None:
+103:                 self.session.close()
+104:             self.session = get_session()
+105: 
+106: 
+107:     def _login_step1(self):
+108:         logging.debug("Xiaomi login step 1")
+109: 
+110:         url = "https://account.xiaomi.com/pass/serviceLogin?sid=xiaomiio&_json=true"
+111:         self.session.cookies.update({'userId': self.user_id if self.user_id else self.username})
+112:         response = self.session.get(url)
+113:         response_json = json.loads(response.text.replace("&&&START&&&", ""))
+114: 
+115:         logging.debug("Xiaomi login step 1 response code: %s", response.status_code)
+116:         logging.debug("Xiaomi login step 1 response: %s", json.dumps(response_json))
+117: 
+118:         try:
+119:             if "_sign" in response_json:
+120:                 sign = response_json["_sign"]
+121:                 logging.debug("Xiaomi login step 1 sign: %s", sign)
+122:                 return sign
+123:             else:
+124:                 logging.debug("Xiaomi login _sign missing. Maybe still has login cookie.")
+125:                 return ""
+126: 
+127:         except Exception as e:
+128:             raise MiCloudException("Error getting logon sign. Cannot parse response.", e)
+129: 
+130: 
+131:     def _login_step2(self, sign):
+132:         logging.debug("Xiaomi login step 2")
+133: 
+134:         url = "https://account.xiaomi.com/pass/serviceLoginAuth2"
+135:         post_data = {
+136:             'sid': "xiaomiio",
+137:             'hash': hashlib.md5(self.password.encode()).hexdigest().upper(),
+138:             'callback': "https://sts.api.io.mi.com/sts",
+139:             'qs': '%3Fsid%3Dxiaomiio%26_json%3Dtrue',
+140:             'user': self.username,
+141:             '_json': 'true'
+142:         }
+143:         if sign:
+144:             post_data['_sign'] = sign
+145: 
+146:         response = self.session.post(url, data = post_data)
+147:         response_json = json.loads(response.text.replace("&&&START&&&", ""))
+148: 
+149:         logging.debug("Xiaomi login step 2 response code: %s", response.status_code)
+150:         logging.debug("Xiaomi login step 2 response: %s", json.dumps(response_json))
+151: 
+152:         if response_json['result'] != "ok":
+153:             raise MiCloudAccessDenied("Access denied. Did you set the correct api key and/or username?")
+154: 
+155:         self.user_id = response_json['userId']
+156:         self.ssecurity = response_json['ssecurity']
+157:         self.cuser_id = response_json['cUserId']
+158:         self.pass_token = response_json['passToken']
+159: 
+160:         location = response_json['location']
+161:         code = response_json['code']
+162: 
+163:         logging.debug("Xiaomi login ssecurity: %s", self.ssecurity)
+164:         logging.debug("Xiaomi login userId: %s", self.user_id)
+165:         logging.debug("Xiaomi login cUserId: %s", self.cuser_id)
+166:         logging.debug("Xiaomi login passToken: %s", self.pass_token)
+167:         logging.debug("Xiaomi login location: %s", location)
+168:         logging.debug("Xiaomi login code: %s", code)
+169: 
+170:         if location:
+171:             return location
+172:         else:
+173:             raise MiCloudException("Error getting logon location URL. Return code: " + code)
+174: 
+175: 
+176:     def _login_step3(self, location):
+177:         logging.debug("Xiaomi login step 3 @ %s", location)
+178: 
+179:         self.session.headers.update({'content-type': 'application/x-www-form-urlencoded'})
+180:         response = self.session.get(location)
+181: 
+182:         logging.debug("Xiaomi login step 3 content: %s", response.text)
+183:         logging.debug("Xiaomi login step 3 status code: %s", response.status_code)
+184: 
+185:         service_token = response.cookies['serviceToken']
+186:         if service_token:
+187:             self.service_token = service_token
+188: 
+189:         return response
+190: 
+191: 
+192:     def get_devices(self, country=None, raw=False, save=False, file="devices.json"):
+193:         """Get a list with information about all devices.
+194: 
+195:         :param country: country code for the server. Default: "de" (Europe)
+196:         :param raw: Return raw result from server instead of a python list.
+197:         :param save: Save information to json file. Default: False
+198:         :param file: json file to save to.
+199:         :return: List of devices
+200:         :rtype: list
+201:         """
+202: 
+203:         if not country:
+204:             country = self.default_server
+205: 
+206:         response = self._get_device_string(country)
+207:         if not response:
+208:             return None
+209: 
+210:         try:
+211:             json_resp = json.loads(response)
+212:             logging.debug('Devices data: %s', response)
+213: 
+214:             if save:
+215:                 f = open("devices.json", "w")
+216:                 f.write(json.dumps(json_resp['result'], indent=4, sort_keys=True))
+217:                 f.close()
+218: 
+219:             if raw:
+220:                 return response
+221:             else:
+222:                 return json_resp['result']['list']
+223:         except ValueError as e:
+224:             logging.info("Error while parsing devices: %s", str(e))
+225: 
+226: 
+227:     def _get_device_string(self, country):
+228:         if not country:
+229:             country = self.default_server
+230: 
+231:         url = self._get_api_url(country) + "/home/device_list"
+232:         params = {
+233:             'data': '{"getVirtualModel":true,"getHuamiDevices":1,"get_split_device":false,"support_smart_home":true}'
+234:         }
+235:         try:
+236:             resp = self.request(url, params)
+237:             logging.debug("Get devices response: %s", resp)
+238:             if len(resp) > 2:
+239:                 return resp
+240:         except MiCloudException as e:
+241:             logging.error("%s", str(e))
+242:         return None
+243: 
+244: 
+245:     def _get_api_url(self, country):
+246:         return "https://" + ("" if country.strip().lower() == "cn" else country.strip().lower() + ".") + "api.io.mi.com/app"
+247: 
+248: 
+249:     def request_country(self, url_part, country, params):
+250:         url = self._get_api_url(country) + url_part
+251:         response = self.request(url, params)
+252:         logging.debug("Request to %s server %s. Response: %s", country, url_part, response)
+253:         return response
+254: 
+255: 
+256:     def request(self, url, params):
+257:         if not self.service_token or not self.user_id:
+258:             raise MiCloudException("Cannot execute request. service token or userId missing. Make sure to login.")
+259: 
+260:         logging.debug("Send request: %s to %s", params['data'], url)
+261: 
+262:         self._init_session(reset=True)
+263:         self.session.headers.update({
+264:             'Accept-Encoding': 'identity',
+265:             'x-xiaomi-protocal-flag-cli': 'PROTOCAL-HTTP2',
+266:             'content-type': 'application/x-www-form-urlencoded',
+267:             'MIOT-ENCRYPT-ALGORITHM': 'ENCRYPT-RC4'
+268:         })
+269:         self.session.cookies.update({
+270:             'userId': str(self.user_id),
+271:             'yetAnotherServiceToken': self.service_token,
+272:             'serviceToken': self.service_token,
+273:             'locale': str(self.locale),
+274:             'timezone': str(self.timezone),
+275:             'is_daylight': str(time.daylight),
+276:             'dst_offset': str(time.localtime().tm_isdst*60*60*1000),
+277:             'channel': 'MI_APP_STORE'
+278:         })
+279:         for c in self.session.cookies:
+280:             logging.debug('Cookie: %s', c)
+281: 
+282:         try:
+283:             nonce = miutils.gen_nonce()
+284:             signed_nonce = miutils.signed_nonce(self.ssecurity, nonce) 
+285:             post_data = miutils.generate_enc_params(url, "POST", signed_nonce, nonce, params, self.ssecurity)
+286: 
+287:             response = self.session.post(url, data = post_data)
+288:             if response.status_code == 403:
+289:                 self.service_token = None
+290: 
+291:             return miutils.decrypt_rc4(miutils.signed_nonce(self.ssecurity, post_data["_nonce"]), response.text)
+292:         except requests.exceptions.HTTPError as e:
+293:             self.service_token = None
+294:             logging.exception("Error while executing request to %s :%s", url, str(e))
+295:         except MiCloudException as e:
+296:             logging.exception("Error while decrypting response of request to %s :%s", url, str(e))
+297:         except Exception as e:
+298:             logging.exception("Error while executing request to %s :%s", url, str(e))
+299: 
+
+
+=== ALL FUNCTIONS ===
+2:     def __init__(self, username=None, password=None):
+24:     def get_token(self):
+29:     def _check_credentials(self):
+33:     def login(self):
+75:     def _login_request(self):
+100:     def _init_session(self, reset=False):
+107:     def _login_step1(self):
+131:     def _login_step2(self, sign):
+176:     def _login_step3(self, location):
+192:     def get_devices(self, country=None, raw=False, save=False, file="devices.json"):
+227:     def _get_device_string(self, country):
+245:     def _get_api_url(self, country):
+249:     def request_country(self, url_part, country, params):
+256:     def request(self, url, params):
