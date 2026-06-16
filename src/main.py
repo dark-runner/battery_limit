@@ -115,17 +115,22 @@ def _setup_logging():
 
 _setup_logging()
 
-# ── 阻止系统睡眠 ─────────────────────────────────────────
+# ── 阻止系统睡眠（最强模式）─────────────────────────────
 _ES_CONTINUOUS = 0x80000000
 _ES_SYSTEM_REQUIRED = 0x00000001
+_ES_AWAYMODE_REQUIRED = 0x00000040  # 离开模式（Modern Standby 关键）
 
 
 def _prevent_sleep(enable: bool = True):
-    """阻止/恢复系统睡眠"""
+    """最强防睡眠：阻止系统睡眠 + 现代待机 + 离开模式"""
     try:
         kernel32 = ctypes.windll.kernel32
         if enable:
-            kernel32.SetThreadExecutionState(_ES_CONTINUOUS | _ES_SYSTEM_REQUIRED)
+            kernel32.SetThreadExecutionState(
+                _ES_CONTINUOUS |
+                _ES_SYSTEM_REQUIRED |
+                _ES_AWAYMODE_REQUIRED
+            )
         else:
             kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
     except Exception:
