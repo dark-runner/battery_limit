@@ -75,8 +75,17 @@ class Config:
         Args:
             config_file: 配置文件路径
         """
-        self.config_file = config_file
+        self.config_file = self._resolve_path(config_file)
         self.config: Dict[str, Any] = self._load_config()
+
+    @staticmethod
+    def _resolve_path(filename: str) -> str:
+        """将文件名解析为绝对路径（兼容打包和开发模式）"""
+        if getattr(sys, 'frozen', False):
+            base = Path(sys.executable).parent
+        else:
+            base = Path(__file__).resolve().parent.parent  # src/.. = 项目根目录
+        return str(base / filename)
 
     def _load_config(self) -> Dict[str, Any]:
         """从文件加载配置，如果文件不存在则返回默认配置"""
