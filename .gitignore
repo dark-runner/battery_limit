@@ -63,3 +63,15 @@ env/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Log files
+*.log
+
+# Personal / reference files (not part of project)
+样式参考.jfif
+
+# Generated preview
+app_preview.png
+
+# Temp directory
+%temp%/miio_wheel/

@@ -103,9 +103,12 @@ def _setup_logging():
     root = logging.getLogger()
     if root.handlers:
         return
+    # 使用脚本所在目录，避免开机自启时工作目录为 system32 导致权限错误
+    log_dir = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(log_dir, 'battery_control.log')
     fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     root.setLevel(logging.INFO)
-    fh = RotatingFileHandler('battery_control.log', maxBytes=5*1024*1024, backupCount=3, encoding='utf-8-sig')
+    fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8-sig')
     fh.setFormatter(fmt)
     root.addHandler(fh)
     ch = logging.StreamHandler(sys.stdout)
